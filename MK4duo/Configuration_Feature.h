@@ -90,8 +90,8 @@
  * - Case Light
  * ADVANCED MOTION FEATURES:
  * - Stepper auto deactivation
+ * - Double / Quad Stepping
  * - Low speed stepper
- * - High speed stepper
  * - Microstepping
  * - Motor's current
  * - I2C DIGIPOT
@@ -702,23 +702,34 @@
  ***************************** Babystepping *******************************
  **************************************************************************
  *                                                                        *
- * Babystepping enables the user to control the axis in tiny amounts,     *
- * independently from the normal printing process.                        *
- * It can e.g. be used to change z-positions in the print startup         *
- * phase in real-time.                                                    *
- * Does not respect endstops!                                             *
+ * Babystepping enables movement of the axes by tiny increments without   *
+ * changing the current position values. This feature is used primarily   *
+ * to adjust the Z axis in the first layer of a print in real-time.       *
+ *                                                                        *
+ * Warning: Does not respect endstops!                                    *
  *                                                                        *
  **************************************************************************/
 //#define BABYSTEPPING
 
-// not only z, but also XY in the menu. more clutter, more functions
-// not implemented for CoreXY and deltabots!
-#define BABYSTEP_XY  
+// Also enable X/Y Babystepping. Not supported on DELTA!
+//#define BABYSTEP_XY  
 
-// true for inverse movements in Z
+// Change if Z babysteps should go the other way
 #define BABYSTEP_INVERT_Z false
-// faster z movements
-#define BABYSTEP_MULTIPLICATOR 2
+// Babysteps are very small. Increase for faster motion.
+#define BABYSTEP_MULTIPLICATOR 100
+// Enable to combine M851 and Babystepping
+//#define BABYSTEP_ZPROBE_OFFSET
+// Double-click on the Status Screen for Z Babystepping.
+//#define DOUBLECLICK_FOR_Z_BABYSTEPPING
+// Maximum interval between clicks, in milliseconds.
+// Note: Extra time may be added to mitigate controller latency.
+#define DOUBLECLICK_MAX_INTERVAL 1250
+
+// Enable graphical overlay on Z-offset editor
+//#define BABYSTEP_ZPROBE_GFX_OVERLAY
+// Reverses the direction of the CW/CCW indicators 
+//#define BABYSTEP_ZPROBE_GFX_REVERSE
 /**************************************************************************/
 
 
@@ -740,17 +751,18 @@
  * Note that M207 / M208 / M209 settings are saved to EEPROM.             *
  *                                                                        *
  **************************************************************************/
-//#define FWRETRACT                     // ONLY PARTIALLY TESTED
+//#define FWRETRACT                       // ONLY PARTIALLY TESTED
 
-#define MIN_RETRACT                 0.1 // A retract/recover of this length or longer can be converted to auto-retract
-#define RETRACT_LENGTH                3 // Default retract length (positive mm)
-#define RETRACT_LENGTH_SWAP          13 // Default swap retract length (positive mm), for extruder change
-#define RETRACT_FEEDRATE             45 // Default feedrate for retracting (mm/s)
-#define RETRACT_ZLIFT                 0 // Default retract Z-lift
-#define RETRACT_RECOVER_LENGTH        0 // Default additional recover length (mm, added to retract length when recovering)
-#define RETRACT_RECOVER_LENGTH_SWAP   0 // Default additional swap recover length (mm, added to retract length when recovering from extruder change)
-#define RETRACT_RECOVER_FEEDRATE      8 // Default feedrate for recovering from retraction (mm/s)
-#define RETRACT_RECOVER_FEEDRATE_SWAP 8 // Default feedrate for recovering from swap retraction (mm/s)
+#define MIN_AUTORETRACT               0.1 // When auto-retract is on, convert E moves of this length and over
+#define MAX_AUTORETRACT              10.0 // Upper limit for auto-retract conversion
+#define RETRACT_LENGTH                3   // Default retract length (positive mm)
+#define RETRACT_LENGTH_SWAP          13   // Default swap retract length (positive mm), for extruder change
+#define RETRACT_FEEDRATE             45   // Default feedrate for retracting (mm/s)
+#define RETRACT_ZLIFT                 0   // Default retract Z-lift
+#define RETRACT_RECOVER_LENGTH        0   // Default additional recover length (mm, added to retract length when recovering)
+#define RETRACT_RECOVER_LENGTH_SWAP   0   // Default additional swap recover length (mm, added to retract length when recovering from extruder change)
+#define RETRACT_RECOVER_FEEDRATE      8   // Default feedrate for recovering from retraction (mm/s)
+#define RETRACT_RECOVER_FEEDRATE_SWAP 8   // Default feedrate for recovering from swap retraction (mm/s)
 /**************************************************************************/
 
 
@@ -1678,6 +1690,17 @@
 
 
 /***********************************************************************
+ ********************** Double / Quad Stepping *************************
+ ***********************************************************************
+ *                                                                     *
+ * Disable double / quad stepping                                      *
+ *                                                                     *
+ ***********************************************************************/
+//#define DISABLE_DOUBLE_QUAD_STEPPING
+/***********************************************************************/
+
+
+/***********************************************************************
  ************************* Low speed stepper ***************************
  ***********************************************************************
  *                                                                     *
@@ -1828,6 +1851,20 @@
 #define MAX_CMD_SIZE 96
 // For Arduino DUE setting to 8
 #define BUFSIZE 4
+
+// Transmission to Host Buffer Size
+// To save 386 bytes of PROGMEM (and TX_BUFFER_SIZE+3 bytes of RAM) set to 0.
+// To buffer a simple "ok" you need 4 bytes.
+// For ADVANCED_OK (M105) you need 32 bytes.
+// For debug-echo: 128 bytes for the optimal speed.
+// Other output doesn't need to be that speedy.
+// :[0, 2, 4, 8, 16, 32, 64, 128, 256]
+#define TX_BUFFER_SIZE 32
+
+// Host Receive Buffer Size
+// To use flow control, set this buffer size to at least 1024 bytes.
+// :[0, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048]
+#define RX_BUFFER_SIZE 128
 
 // Defines the number of memory slots for saving/restoring position (G60/G61)
 // The values should not be less than 1

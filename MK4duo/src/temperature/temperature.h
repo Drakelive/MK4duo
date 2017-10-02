@@ -59,10 +59,6 @@ class Temperature {
         static int lpq_len;
     #endif
 
-    #if ENABLED(BABYSTEPPING)
-      static volatile int babystepsTodo[3];
-    #endif
-
     #if HAS_EXTRUDERS && ENABLED(PREVENT_COLD_EXTRUSION)
       static bool allow_cold_extrude;
       static int16_t extrude_min_temp;
@@ -160,40 +156,6 @@ class Temperature {
       static int widthFil_to_size_ratio(); // Convert raw Filament Width to an extrusion ratio
     #endif    
 
-    #if ENABLED(BABYSTEPPING)
-
-      static void babystep_axis(const AxisEnum axis, const int distance) {
-        if (mechanics.axis_known_position[axis]) {
-          #if IS_CORE
-            #if ENABLED(BABYSTEP_XY)
-              switch (axis) {
-                case CORE_AXIS_1: // X on CoreXY and CoreXZ, Y on CoreYZ
-                  babystepsTodo[CORE_AXIS_1] += distance * 2;
-                  babystepsTodo[CORE_AXIS_2] += distance * 2;
-                  break;
-                case CORE_AXIS_2: // Y on CoreXY, Z on CoreXZ and CoreYZ
-                  babystepsTodo[CORE_AXIS_1] += CORESIGN(distance * 2);
-                  babystepsTodo[CORE_AXIS_2] -= CORESIGN(distance * 2);
-                  break;
-                case NORMAL_AXIS: // Z on CoreXY, Y on CoreXZ, X on CoreYZ
-                  babystepsTodo[NORMAL_AXIS] += distance;
-                  break;
-              }
-            #elif CORE_IS_XZ || CORE_IS_YZ
-              // Only Z stepping needs to be handled here
-              babystepsTodo[CORE_AXIS_1] += CORESIGN(distance * 2);
-              babystepsTodo[CORE_AXIS_2] -= CORESIGN(distance * 2);
-            #else
-              babystepsTodo[Z_AXIS] += distance;
-            #endif
-          #else
-            babystepsTodo[axis] += distance;
-          #endif
-        }
-      }
-
-    #endif // BABYSTEPPING
-
     #if ENABLED(PROBING_HEATERS_OFF)
       static void pause(const bool p);
       static bool is_paused() { return paused; }
@@ -244,11 +206,11 @@ class Temperature {
     static uint8_t get_pid_output(const int8_t h);
 
     #if ENABLED(SUPPORT_MAX6675)
-      static int16_t read_max6675(const Pin ss_pin, const int8_t h);
+      static int16_t read_max6675(const Pin cs_pin, const int8_t h);
     #endif
 
     #if ENABLED(SUPPORT_MAX31855)
-      static int16_t read_max31855(const Pin ss_pin);
+      static int16_t read_max31855(const Pin cs_pin);
     #endif
 
     static void checkExtruderAutoFans();

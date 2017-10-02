@@ -132,8 +132,6 @@ volatile uint32_t Stepper::step_events_completed = 0; // The number of step even
 
 #endif // ADVANCE or LIN_ADVANCE
 
-long Stepper::acceleration_time, Stepper::deceleration_time;
-
 volatile long Stepper::machine_position[NUM_AXIS] = { 0 };
 volatile signed char Stepper::count_direction[NUM_AXIS] = { 1, 1, 1, 1 };
 
@@ -148,11 +146,16 @@ volatile signed char Stepper::count_direction[NUM_AXIS] = { 1, 1, 1, 1 };
   #endif // LASER_RASTER
 #endif // LASER
 
+long            Stepper::acceleration_time,
+                Stepper::deceleration_time;
+
 HAL_TIMER_TYPE  Stepper::acc_step_rate, // needed for deceleration start point
                 Stepper::OCR1A_nominal;
-uint8_t Stepper::step_loops, Stepper::step_loops_nominal;
 
-volatile long Stepper::endstops_trigsteps[XYZ];
+uint8_t         Stepper::step_loops,
+                Stepper::step_loops_nominal;
+
+volatile long   Stepper::endstops_trigsteps[XYZ];
 
 #if ENABLED(X_TWO_STEPPER)
   #define X_APPLY_DIR(v,Q)  { X_DIR_WRITE(v); X2_DIR_WRITE(v != INVERT_X2_VS_X_DIR); }
@@ -1023,7 +1026,7 @@ void Stepper::isr() {
   }
 
   #if DISABLED(ADVANCE) && DISABLED(LIN_ADVANCE)
-    #if ENABLED(ARDUINO_ARCH_SAM)
+    #if ENABLED(CPU_32_BIT)
       HAL_TIMER_TYPE stepper_timer_count = HAL_timer_get_count(STEPPER_TIMER);
       NOLESS(stepper_timer_count, (HAL_timer_get_current_count(STEPPER_TIMER) + 8 * STEPPER_TIMER_TICKS_PER_US));
       HAL_TIMER_SET_STEPPER_COUNT(stepper_timer_count);
@@ -1551,6 +1554,11 @@ long Stepper::position(AxisEnum axis) {
 }
 
 void Stepper::enable_all_steppers() {
+
+  #if HAS_POWER_SWITCH 
+    powerManager.power_on();
+  #endif
+
   enable_X();
   enable_Y();
   enable_Z();

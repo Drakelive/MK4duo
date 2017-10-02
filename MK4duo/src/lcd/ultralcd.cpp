@@ -222,13 +222,7 @@ uint16_t max_display_update_time = 0;
   ////////////////////////////////////////////
 
   #ifndef ENCODER_FEEDRATE_DEADZONE
-    #define ENCODER_FEEDRATE_DEADZONE 10
-  #endif
-  #ifndef ENCODER_STEPS_PER_MENU_ITEM
-    #define ENCODER_STEPS_PER_MENU_ITEM 5
-  #endif
-  #ifndef ENCODER_PULSES_PER_STEP
-    #define ENCODER_PULSES_PER_STEP 1
+    #define ENCODER_FEEDRATE_DEADZONE 6
   #endif
 
   /**
@@ -719,7 +713,7 @@ void kill_screen(const char* lcd_msg) {
 
     void lcd_sdcard_pause() {
       card.pauseSDPrint();
-      printer.print_job_counter.pause();
+      print_job_counter.pause();
       #if ENABLED(PARK_HEAD_ON_PAUSE)
         commands.enqueue_and_echo_commands_P(PSTR("M125"));
       #endif
@@ -731,7 +725,7 @@ void kill_screen(const char* lcd_msg) {
         commands.enqueue_and_echo_commands_P(PSTR("M24"));
       #else
         card.startFileprint();
-        printer.print_job_counter.start();
+        print_job_counter.start();
       #endif
       lcd_reset_status();
     }
@@ -977,7 +971,7 @@ void kill_screen(const char* lcd_msg) {
         const int16_t babystep_increment = (int32_t)encoderPosition * (BABYSTEP_MULTIPLICATOR);
         encoderPosition = 0;
         lcdDrawUpdate = LCDVIEW_REDRAW_NOW;
-        thermalManager.babystep_axis(axis, babystep_increment);
+        mechanics.babystep_axis(axis, babystep_increment);
         babysteps_done += babystep_increment;
       }
       if (lcdDrawUpdate)
@@ -985,13 +979,57 @@ void kill_screen(const char* lcd_msg) {
     }
 
     #if ENABLED(BABYSTEP_XY)
-      void _lcd_babystep_x() { _lcd_babystep(X_AXIS, PSTR(MSG_BABYSTEPPING_X)); }
-      void _lcd_babystep_y() { _lcd_babystep(Y_AXIS, PSTR(MSG_BABYSTEPPING_Y)); }
+      void _lcd_babystep_x() { _lcd_babystep(X_AXIS, PSTR(MSG_BABYSTEP_X)); }
+      void _lcd_babystep_y() { _lcd_babystep(Y_AXIS, PSTR(MSG_BABYSTEP_Y)); }
       void lcd_babystep_x() { lcd_goto_screen(_lcd_babystep_x); babysteps_done = 0; defer_return_to_status = true; }
       void lcd_babystep_y() { lcd_goto_screen(_lcd_babystep_y); babysteps_done = 0; defer_return_to_status = true; }
     #endif
 
     #if ENABLED(BABYSTEP_ZPROBE_OFFSET)
+
+      #if ENABLED(BABYSTEP_ZPROBE_GFX_OVERLAY)
+
+        void _lcd_babystep_zoffset_overlay(const float zprobe_zoffset) {
+          // Determine whether the user is raising or lowering the nozzle.
+          static int dir = 0;
+          static float old_zprobe_zoffset = 0;
+          if (zprobe_zoffset != old_zprobe_zoffset) {
+            dir = (zprobe_zoffset > old_zprobe_zoffset) ? 1 : -1;
+            old_zprobe_zoffset = zprobe_zoffset;
+          }
+
+          #if ENABLED(BABYSTEP_ZPROBE_GFX_REVERSE)
+            const unsigned char* rot_up   = ccw_bmp;
+            const unsigned char* rot_down = cw_bmp;
+          #else
+            const unsigned char* rot_up   = cw_bmp;
+            const unsigned char* rot_down = ccw_bmp;
+          #endif
+
+          #if ENABLED(USE_BIG_EDIT_FONT)
+            const int left   = 0,
+                      right  = 45,
+                      nozzle = 95;
+          #else
+            const int left   = 5,
+                      right  = 90,
+                      nozzle = 60;
+          #endif
+
+          // Draw a representation of the nozzle
+          if (PAGE_CONTAINS(3, 16))  u8g.drawBitmapP(nozzle + 6, 4 - dir, 2, 12, nozzle_bmp);
+          if (PAGE_CONTAINS(20, 20)) u8g.drawBitmapP(nozzle + 0, 20, 3, 1, offset_bedline_bmp);
+
+          // Draw cw/ccw indicator and up/down arrows.
+          if (PAGE_CONTAINS(47, 62)) {
+            u8g.drawBitmapP(left  + 0, 47, 3, 16, rot_down);
+            u8g.drawBitmapP(right + 0, 47, 3, 16, rot_up);
+            u8g.drawBitmapP(right + 20, 48 - dir, 2, 13, up_arrow_bmp);
+            u8g.drawBitmapP(left  + 20, 49 - dir, 2, 13, down_arrow_bmp);
+          }
+        }
+
+      #endif // BABYSTEP_ZPROBE_GFX_OVERLAY
 
       void lcd_babystep_zoffset() {
         if (lcd_clicked) { return lcd_goto_previous_menu_no_defer(); }
@@ -1001,24 +1039,28 @@ void kill_screen(const char* lcd_msg) {
           const int16_t babystep_increment = (int32_t)encoderPosition * (BABYSTEP_MULTIPLICATOR);
           encoderPosition = 0;
 
-          const float new_zoffset = zprobe_zoffset + planner.steps_to_mm[Z_AXIS] * babystep_increment;
+          const float new_zoffset = probe.offset[Z_AXIS] + mechanics.steps_to_mm[Z_AXIS] * babystep_increment;
           if (WITHIN(new_zoffset, Z_PROBE_OFFSET_RANGE_MIN, Z_PROBE_OFFSET_RANGE_MAX)) {
 
-            if (leveling_is_active())
-              thermalManager.babystep_axis(Z_AXIS, babystep_increment);
+            if (bedlevel.leveling_is_active())
+              mechanics.babystep_axis(Z_AXIS, babystep_increment);
 
-            zprobe_zoffset = new_zoffset;
-            refresh_zprobe_zoffset(true);
+            probe.offset[Z_AXIS] = new_zoffset;
+            probe.refresh_offset(true);
             lcdDrawUpdate = LCDVIEW_CALL_REDRAW_NEXT;
           }
         }
-        if (lcdDrawUpdate)
-          lcd_implementation_drawedit(PSTR(MSG_ZPROBE_ZOFFSET), ftostr43sign(zprobe_zoffset));
+        if (lcdDrawUpdate) {
+          lcd_implementation_drawedit(PSTR(MSG_PROBE_OFFSET), ftostr43sign(probe.offset[Z_AXIS]));
+          #if ENABLED(BABYSTEP_ZPROBE_GFX_OVERLAY)
+            _lcd_babystep_zoffset_overlay(probe.offset[Z_AXIS]);
+          #endif
+        }
       }
 
     #else // !BABYSTEP_ZPROBE_OFFSET
 
-      void _lcd_babystep_z() { _lcd_babystep(Z_AXIS, PSTR(MSG_BABYSTEPPING_Z)); }
+      void _lcd_babystep_z() { _lcd_babystep(Z_AXIS, PSTR(MSG_BABYSTEP_Z)); }
       void lcd_babystep_z() { lcd_goto_screen(_lcd_babystep_z); babysteps_done = 0; defer_return_to_status = true; }
 
     #endif // !BABYSTEP_ZPROBE_OFFSET
@@ -1266,7 +1308,7 @@ void kill_screen(const char* lcd_msg) {
         MENU_ITEM(submenu, MSG_BABYSTEP_Y, lcd_babystep_y);
       #endif
       #if ENABLED(BABYSTEP_ZPROBE_OFFSET)
-        MENU_ITEM(submenu, MSG_ZPROBE_ZOFFSET, lcd_babystep_zoffset);
+        MENU_ITEM(submenu, MSG_PROBE_OFFSET, lcd_babystep_zoffset);
       #else
         MENU_ITEM(submenu, MSG_BABYSTEP_Z, lcd_babystep_z);
       #endif
@@ -3457,7 +3499,7 @@ void kill_screen(const char* lcd_msg) {
     MENU_BACK(MSG_CONTROL);
 
     #if ENABLED(BABYSTEP_ZPROBE_OFFSET)
-      MENU_ITEM(submenu, MSG_ZPROBE_ZOFFSET, lcd_babystep_zoffset);
+      MENU_ITEM(submenu, MSG_PROBE_OFFSET, lcd_babystep_zoffset);
     #elif HAS_BED_PROBE
       MENU_ITEM_EDIT(float32, MSG_PROBE_OFFSET, &probe.offset[Z_AXIS], Z_PROBE_OFFSET_RANGE_MIN, Z_PROBE_OFFSET_RANGE_MAX);
     #endif
@@ -3530,18 +3572,18 @@ void kill_screen(const char* lcd_msg) {
     void lcd_control_retract_menu() {
       START_MENU();
       MENU_BACK(MSG_CONTROL);
-      MENU_ITEM_EDIT(bool, MSG_AUTORETRACT, &tools.autoretract_enabled);
-      MENU_ITEM_EDIT(float52, MSG_CONTROL_RETRACT, &retract_length, 0, 100);
+      MENU_ITEM_EDIT_CALLBACK(bool, MSG_AUTORETRACT, &fwretract.autoretract_enabled, fwretract.refresh_autoretract);
+      MENU_ITEM_EDIT(float52, MSG_CONTROL_RETRACT, &fwretract.retract_length, 0, 100);
       #if EXTRUDERS > 1
-        MENU_ITEM_EDIT(float52, MSG_CONTROL_RETRACT_SWAP, &retract_length_swap, 0, 100);
+        MENU_ITEM_EDIT(float52, MSG_CONTROL_RETRACT_SWAP, &fwretract.swap_retract_length, 0, 100);
       #endif
-      MENU_ITEM_EDIT(float3, MSG_CONTROL_RETRACTF, &retract_feedrate_mm_s, 1, 999);
-      MENU_ITEM_EDIT(float52, MSG_CONTROL_RETRACT_ZLIFT, &retract_zlift, 0, 999);
-      MENU_ITEM_EDIT(float52, MSG_CONTROL_RETRACT_RECOVER, &retract_recover_length, -100, 100);
+      MENU_ITEM_EDIT(float3, MSG_CONTROL_RETRACTF, &fwretract.retract_feedrate_mm_s, 1, 999);
+      MENU_ITEM_EDIT(float52, MSG_CONTROL_RETRACT_ZLIFT, &fwretract.retract_zlift, 0, 999);
+      MENU_ITEM_EDIT(float52, MSG_CONTROL_RETRACT_RECOVER, &fwretract.retract_recover_length, -100, 100);
       #if EXTRUDERS > 1
-        MENU_ITEM_EDIT(float52, MSG_CONTROL_RETRACT_RECOVER_SWAP, &retract_recover_length_swap, -100, 100);
+        MENU_ITEM_EDIT(float52, MSG_CONTROL_RETRACT_RECOVER_SWAP, &fwretract.swap_retract_recover_length, -100, 100);
       #endif
-      MENU_ITEM_EDIT(float3, MSG_CONTROL_RETRACT_RECOVERF, &retract_recover_feedrate_mm_s, 1, 999);
+      MENU_ITEM_EDIT(float3, MSG_CONTROL_RETRACT_RECOVERF, &fwretract.retract_recover_feedrate_mm_s, 1, 999);
       END_MENU();
     }
 
@@ -3707,21 +3749,21 @@ void kill_screen(const char* lcd_msg) {
       char printTime[20];
       char Filamentlung[20];
 
-      t       = printer.print_job_counter.data.printer_usage / 60;
+      t       = print_job_counter.data.printer_usage / 60;
       day     = t / 60 / 24;
       hours   = (t / 60) % 24;
       minutes = t % 60;
       sprintf_P(lifeTime, PSTR("%ud %uh %um"), day, hours, minutes);
 
-      t       = printer.print_job_counter.data.printTime / 60;
+      t       = print_job_counter.data.printTime / 60;
       day     = t / 60 / 24;
       hours   = (t / 60) % 24;
       minutes = t % 60;
       sprintf_P(printTime, PSTR("%ud %uh %um"), day, hours, minutes);
 
-      kmeter      = (long)printer.print_job_counter.data.filamentUsed / 1000 / 1000;
-      meter       = ((long)printer.print_job_counter.data.filamentUsed / 1000) % 1000;
-      centimeter  = ((long)printer.print_job_counter.data.filamentUsed / 10) % 100;
+      kmeter      = (long)print_job_counter.data.filamentUsed / 1000 / 1000;
+      meter       = ((long)print_job_counter.data.filamentUsed / 1000) % 1000;
+      centimeter  = ((long)print_job_counter.data.filamentUsed / 10) % 100;
       sprintf_P(Filamentlung, PSTR("%uKm %um %ucm"), kmeter, meter, centimeter);
 
       #if HAS_POWER_CONSUMPTION_SENSOR
@@ -3730,8 +3772,8 @@ void kill_screen(const char* lcd_msg) {
       #endif
 
       START_SCREEN();
-      STATIC_ITEM(MSG_INFO_TOTAL_PRINTS ": ", false, false, itostr3left(printer.print_job_counter.data.totalPrints));
-      STATIC_ITEM(MSG_INFO_FINISHED_PRINTS ": ",  false, false, itostr3left(printer.print_job_counter.data.finishedPrints));
+      STATIC_ITEM(MSG_INFO_TOTAL_PRINTS ": ", false, false, itostr3left(print_job_counter.data.totalPrints));
+      STATIC_ITEM(MSG_INFO_FINISHED_PRINTS ": ",  false, false, itostr3left(print_job_counter.data.finishedPrints));
       STATIC_ITEM(MSG_INFO_ON_TIME ": ",  false, false, lifeTime);
       STATIC_ITEM(MSG_INFO_PRINT_TIME ": ",  false, false, printTime);
       STATIC_ITEM(MSG_INFO_FILAMENT_USAGE ": ",  false, false, Filamentlung);
@@ -3754,8 +3796,8 @@ void kill_screen(const char* lcd_msg) {
         #define THERMISTOR_ID TEMP_SENSOR_0
         #include "../temperature/thermistornames.h"
         STATIC_ITEM("T0: " THERMISTOR_NAME, false, true);
-        STATIC_ITEM(MSG_INFO_MIN_TEMP ": " STRINGIFY(heaters[0].mintemp), false);
-        STATIC_ITEM(MSG_INFO_MAX_TEMP ": " STRINGIFY(heaters[0].maxtemp), false);
+        STATIC_ITEM(MSG_INFO_MIN_TEMP ": " STRINGIFY(HEATER_0_MINTEMP), false);
+        STATIC_ITEM(MSG_INFO_MAX_TEMP ": " STRINGIFY(HEATER_0_MAXTEMP), false);
       #endif
 
       #if HAS_TEMP_1
@@ -3763,8 +3805,8 @@ void kill_screen(const char* lcd_msg) {
         #define THERMISTOR_ID TEMP_SENSOR_1
         #include "../temperature/thermistornames.h"
         STATIC_ITEM("T1: " THERMISTOR_NAME, false, true);
-        STATIC_ITEM(MSG_INFO_MIN_TEMP ": " STRINGIFY(heaters[1].mintemp), false);
-        STATIC_ITEM(MSG_INFO_MAX_TEMP ": " STRINGIFY(heaters[1].maxtemp), false);
+        STATIC_ITEM(MSG_INFO_MIN_TEMP ": " STRINGIFY(HEATER_1_MINTEMP), false);
+        STATIC_ITEM(MSG_INFO_MAX_TEMP ": " STRINGIFY(HEATER_1_MAXTEMP), false);
       #endif
 
       #if HAS_TEMP_2
@@ -3772,8 +3814,8 @@ void kill_screen(const char* lcd_msg) {
         #define THERMISTOR_ID TEMP_SENSOR_2
         #include "../temperature/thermistornames.h"
         STATIC_ITEM("T2: " THERMISTOR_NAME, false, true);
-        STATIC_ITEM(MSG_INFO_MIN_TEMP ": " STRINGIFY(heaters[2].mintemp), false);
-        STATIC_ITEM(MSG_INFO_MAX_TEMP ": " STRINGIFY(heaters[2].maxtemp), false);
+        STATIC_ITEM(MSG_INFO_MIN_TEMP ": " STRINGIFY(HEATER_2_MINTEMP), false);
+        STATIC_ITEM(MSG_INFO_MAX_TEMP ": " STRINGIFY(HEATER_2_MAXTEMP), false);
       #endif
 
       #if HAS_TEMP_3
@@ -3781,8 +3823,8 @@ void kill_screen(const char* lcd_msg) {
         #define THERMISTOR_ID TEMP_SENSOR_3
         #include "../temperature/thermistornames.h"
         STATIC_ITEM("T3: " THERMISTOR_NAME, false, true);
-        STATIC_ITEM(MSG_INFO_MIN_TEMP ": " STRINGIFY(heaters[3].mintemp), false);
-        STATIC_ITEM(MSG_INFO_MAX_TEMP ": " STRINGIFY(heaters[3].maxtemp), false);
+        STATIC_ITEM(MSG_INFO_MIN_TEMP ": " STRINGIFY(HEATER_3_MINTEMP), false);
+        STATIC_ITEM(MSG_INFO_MAX_TEMP ": " STRINGIFY(HEATER_3_MAXTEMP), false);
       #endif
 
       #if HAS_TEMP_BED
@@ -3898,11 +3940,11 @@ void kill_screen(const char* lcd_msg) {
     }
 
     void lcd_filament_change_resume_print() {
-      printer.advanced_pause_menu_response = ADVANCED_PAUSE_RESPONSE_RESUME_PRINT;
+      advanced_pause_menu_response = ADVANCED_PAUSE_RESPONSE_RESUME_PRINT;
     }
 
     void lcd_filament_change_extrude_more() {
-      printer.advanced_pause_menu_response = ADVANCED_PAUSE_RESPONSE_EXTRUDE_MORE;
+      advanced_pause_menu_response = ADVANCED_PAUSE_RESPONSE_EXTRUDE_MORE;
     }
 
     void lcd_advanced_pause_option_menu() {
@@ -4157,7 +4199,7 @@ void kill_screen(const char* lcd_msg) {
           break;
         case ADVANCED_PAUSE_MESSAGE_OPTION:
           defer_return_to_status = true;
-          printer.advanced_pause_menu_response = ADVANCED_PAUSE_RESPONSE_WAIT_FOR;
+          advanced_pause_menu_response = ADVANCED_PAUSE_RESPONSE_WAIT_FOR;
           lcd_goto_screen(lcd_advanced_pause_option_menu);
           break;
         case ADVANCED_PAUSE_MESSAGE_RESUME:
@@ -4279,7 +4321,7 @@ void kill_screen(const char* lcd_msg) {
         #endif
         return true;
       }
-      else if (!HAL::AnalogInputValues[ADC_KEYPAD_ANALOG_INDEX])
+      else if (!HAL::AnalogInputValues[ADC_KEYPAD_PIN])
         adc_steps = 0; // reset stepping acceleration
 
       return false;
@@ -5017,7 +5059,7 @@ void lcd_reset_alert_level() { lcd_status_message_level = 0; }
   };
 
   uint8_t get_ADC_keyValue(void) {
-    const uint16_t currentkpADCValue = (HAL::AnalogInputValues[ADC_KEYPAD_ANALOG_INDEX] >> 2);
+    const uint16_t currentkpADCValue = (HAL::AnalogInputValues[ADC_KEYPAD_PIN] >> 2);
     #if ENABLED(ADC_KEYPAD_DEBUG)
       SERIAL_EV(currentkpADCValue);
     #endif

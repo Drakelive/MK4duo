@@ -677,7 +677,7 @@
 
     lcd_refresh();
 
-    report_current_position();
+    //report_current_position();
 
     #if ENABLED(DEBUG_LEVELING_FEATURE)
       if (DEBUGGING(LEVELING)) SERIAL_EM("<<< gcode_G28");
@@ -1025,7 +1025,7 @@
                   _4p_calibration       = probe_points == 2,
                   _4p_towers_points     = _4p_calibration && towers_set,
                   _4p_opposite_points   = _4p_calibration && !towers_set,
-                  _7p_calibration       = probe_points >= 3,
+                  _7p_calibration       = probe_points >= 3 || _0p_calibration,
                   _7p_half_circle       = probe_points == 3,
                   _7p_double_circle     = probe_points == 5,
                   _7p_triple_circle     = probe_points == 6,
@@ -1086,8 +1086,7 @@
       printer.setup_for_endstop_or_probe_move();
       endstops.enable(true);
       if (!_0p_calibration) {
-        if (!Home())
-          return;
+        if (!Home()) return;
         endstops.not_homing();
         DEPLOY_PROBE();
       }
@@ -1117,13 +1116,14 @@
 
         iterations++;
 
+        // Probe the points
+
         if (!_0p_calibration) {
-          // Probe the points
-          if (!_7p_half_circle && !_7p_triple_circle) { // probe the center
+          if (!_7p_half_circle && !_7p_triple_circle) {   // probe center (P1=1, 2=1, 3=0, 4=1, 5=1, 6=0, 7=1)
             z_at_pt[0] += probe.check_pt(probe.offset[X_AXIS], probe.offset[Y_AXIS], stow_after_each, 1, false);
             if (isnan(z_at_pt[0])) return CALIBRATION_CLEANUP();
           }
-          if (_7p_calibration) { // probe extra center points
+          if (_7p_calibration) {                          // probe extra center points (P1=0, 2=0, 3=3, 4=3, 5=6, 6=6, 7=6)
             for (int8_t axis = _7p_multi_circle ? 11 : 9; axis > 0; axis -= _7p_multi_circle ? 2 : 4) {
               const float a = RADIANS(180 + 30 * axis), r = delta_probe_radius * 0.1;
               z_at_pt[0] += probe.check_pt(COS(a) * r + probe.offset[X_AXIS], SIN(a) * r + probe.offset[Y_AXIS], stow_after_each, 1);
@@ -1131,7 +1131,7 @@
             }
             z_at_pt[0] /= float(_7p_double_circle ? 7 : probe_points);
           }
-          if (!_1p_calibration) {  // probe the radius
+          if (!_1p_calibration) {                         // probe the radius points (P1=0, 2=3, 3=6, 4=12, 5=18, 6=30, 7=42)
             bool zig_zag = true;
             const uint8_t start = _4p_opposite_points ? 3 : 1,
                            step = _4p_calibration ? 4 : _7p_half_circle ? 2 : 1;
@@ -1150,10 +1150,9 @@
               z_at_pt[axis] /= (2 * offset_circles + 1);
             }
           }
-          if (_7p_intermed_points) { // average intermediates to tower and opposites
+          if (_7p_intermed_points) // average intermediates to tower and opposites
             for (uint8_t axis = 1; axis < 13; axis += 2)
-              z_at_pt[axis] = (z_at_pt[axis] + (z_at_pt[axis + 1] + z_at_pt[(axis + 10) % 12 + 1]) / 2.0) / 2.0;
-          }
+            z_at_pt[axis] = (z_at_pt[axis] + (z_at_pt[axis + 1] + z_at_pt[(axis + 10) % 12 + 1]) / 2.0) / 2.0;
         }
 
         float S1  = z_at_pt[0],
@@ -1183,7 +1182,7 @@
           const float r_diff = delta_radius - delta_probe_radius,
                       h_factor = (1.00 + r_diff * 0.001) / 6.0,                       // 1.02 / 6 for r_diff = 20mm
                       r_factor = -(1.75 + 0.005 * r_diff + 0.001 * sq(r_diff)) / 6.0, // 2.25 / 6 for r_diff = 20mm
-                      a_factor = 66.66 / delta_probe_radius;                          // 1.25 for cal_rd = 80mm
+                      a_factor = 66.66 / delta_probe_radius;                          // 0.83     for cal_rd = 80mm
 
           #define ZP(N,I) ((N) * z_at_pt[I])
           #define Z6(I) ZP(6, I)
@@ -1223,9 +1222,9 @@
               r_delta         = (Z6(0) - Z1(1) - Z1(5) - Z1(9) - Z1(7) - Z1(11) - Z1(3)) * r_factor;
 
               if (towers_set) {
-                t_delta[A_AXIS] = (            - Z2(5) + Z1(9)         - Z2(11) + Z1(3)) * a_factor;
-                t_delta[B_AXIS] = (      Z2(1)         - Z1(9) + Z2(7)          - Z1(3)) * a_factor;
-                t_delta[C_AXIS] = (    - Z2(1) + Z1(5)         - Z2(7) + Z1(11)        ) * a_factor;
+                t_delta[A_AXIS] = (            - Z1(5) + Z1(9)         - Z1(11) + Z1(3)) * a_factor;
+                t_delta[B_AXIS] = (      Z1(1)         - Z1(9) + Z1(7)          - Z1(3)) * a_factor;
+                t_delta[C_AXIS] = (    - Z1(1) + Z1(5)         - Z1(7) + Z1(11)        ) * a_factor;
               }
               break;
           }
@@ -1355,7 +1354,7 @@
     }
     SERIAL_EOL();
     if (tower_angles) {
-      SERIAL_MSG(".Tower angle:   ");
+      SERIAL_MSG(".Tower angle :  ");
       print_signed_float(PSTR("Tx"), delta_tower_angle_adj[A_AXIS]);
       print_signed_float(PSTR("Ty"), delta_tower_angle_adj[B_AXIS]);
       print_signed_float(PSTR("Tz"), delta_tower_angle_adj[C_AXIS]);

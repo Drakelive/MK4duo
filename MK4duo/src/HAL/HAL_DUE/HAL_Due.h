@@ -63,6 +63,7 @@
 // Types
 // --------------------------------------------------------------------------
 typedef uint32_t  HAL_TIMER_TYPE;
+typedef uint32_t  ptr_int_t;
 typedef uint32_t  millis_t;
 typedef int8_t    Pin;
 static const Pin  NoPin = -1;
@@ -195,6 +196,8 @@ static const Pin  NoPin = -1;
 // TEMPERATURE
 #undef analogInputToDigitalPin
 #define analogInputToDigitalPin(p) ((p < 12) ? (p) + 54 : -1)
+#undef NUM_ANALOG_INPUTS
+#define NUM_ANALOG_INPUTS 16
 // Bits of the ADC converter
 #define ANALOG_INPUT_BITS 12
 #define ANALOG_REDUCE_BITS 0
@@ -215,22 +218,29 @@ extern uint8_t MCUSR;
 volatile static uint32_t debug_counter;
 
 class HAL {
-  public:
+
+  public: /** Constructor */
 
     HAL();
 
     virtual ~HAL();
 
-    #if ANALOG_INPUTS > 0
-      static volatile int16_t AnalogInputValues[ANALOG_INPUTS];
-      static bool Analog_is_ready;
-      static void analogStart();
-      static adc_channel_num_t PinToAdcChannel(Pin pin);
+  public: /** Public Parameters */
 
-      static void AdcEnableChannel(adc_channel_num_t adc_ch) { adc_enable_channel(ADC, adc_ch); }
+    #if ANALOG_INPUTS > 0
+      static volatile int16_t AnalogInputValues[NUM_ANALOG_INPUTS];
+      static bool Analog_is_ready;
+      static adc_channel_num_t PinToAdcChannel(Pin pin);
     #endif
 
     static bool execute_100ms;
+
+  public: /** Public Function */
+
+    #if ANALOG_INPUTS > 0
+      static void analogStart();
+      static void AdcEnableChannel(adc_channel_num_t adc_ch) { adc_enable_channel(ADC, adc_ch); }
+    #endif
 
     static void hwSetup(void);
 
@@ -296,8 +306,33 @@ class HAL {
     static int getFreeRam();
     static void resetHardware();
 
-  protected:
-  private:
+    // SPI related functions
+    #if ENABLED(SOFTWARE_SPI)
+      static uint8_t spiTransfer(uint8_t b); // using Mode 0
+      static void spiBegin();
+      static void spiInit(uint8_t spiRate);
+      static uint8_t spiReceive();
+      static void spiReadBlock(uint8_t* buf, uint16_t nbyte);
+      static void spiSend(uint8_t b);
+      static void spiSend(const uint8_t* buf , size_t n) ;
+      static void spiSendBlock(uint8_t token, const uint8_t* buf);
+    #else
+      // Hardware setup
+      static void spiBegin();
+      static void spiInit(uint8_t spiRate);
+      // Write single byte to SPI
+      static void spiSend(byte b);
+      static void spiSend(const uint8_t* buf, size_t n);
+      static void spiSend(uint32_t chan, byte b);
+      static void spiSend(uint32_t chan ,const uint8_t* buf, size_t n);
+      // Read single byte from SPI
+      static uint8_t spiReceive(void);
+      static uint8_t spiReceive(uint32_t chan);
+      // Read from SPI into buffer
+      static void spiReadBlock(uint8_t* buf, uint16_t nbyte);
+      // Write from buffer to SPI
+      static void spiSendBlock(uint8_t token, const uint8_t* buf);
+    #endif
 
 };
 

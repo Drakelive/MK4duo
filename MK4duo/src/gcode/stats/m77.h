@@ -31,4 +31,4 @@
 /**
  * M77: Stop print timer
  */
-inline void gcode_M77(void) { printer.print_job_counter.stop(); }
+inline void gcode_M77(void) { print_job_counter.stop(); }

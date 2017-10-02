@@ -808,6 +808,10 @@ static void lcd_implementation_status_screen() {
     _draw_axis_label(Z_AXIS, PSTR(MSG_Z), blink);
     lcd.print(ftostr52sp(FIXFLOAT(mechanics.current_position[Z_AXIS])));
 
+    #if HAS_LEVELING
+      lcd.write(bedlevel.leveling_is_active() || blink ? '_' : ' ');
+    #endif
+
   #endif // LCD_HEIGHT > 2
 
   //
@@ -834,7 +838,7 @@ static void lcd_implementation_status_screen() {
     #endif // LCD_WIDTH >= 20 && SDSUPPORT
 
     char buffer[10];
-    duration_t elapsed = printer.print_job_counter.duration();
+    duration_t elapsed = print_job_counter.duration();
     uint8_t len = elapsed.toDigital(buffer);
 
     lcd.setCursor(LCD_WIDTH - len - 1, 2);

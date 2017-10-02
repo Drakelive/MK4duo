@@ -64,9 +64,6 @@ class Printer {
 
     static uint8_t host_keepalive_interval;
 
-    static float  resume_position[XYZE];
-    static bool   move_away_flag;
-
     static bool relative_mode,
                 axis_relative_modes[];
 
@@ -79,11 +76,6 @@ class Printer {
 
     static MK4duoInterruptEvent interruptEvent;
     static PrinterMode          mode;
-    static PrintCounter         print_job_counter;
-
-    #if HAS_SDSUPPORT
-      static bool sd_print_paused;
-    #endif
 
     #if ENABLED(HOST_KEEPALIVE_FEATURE)
       /**
@@ -105,25 +97,12 @@ class Printer {
       #define KEEPALIVE_STATE(n) NOOP
     #endif
 
-    #if ENABLED(ADVANCED_PAUSE_FEATURE)
-      static AdvancedPauseMenuResponse advanced_pause_menu_response;
-    #endif
-
     #if HAS_FIL_RUNOUT || HAS_EXT_ENCODER
       static bool filament_ran_out;
     #endif
 
     #if MB(ALLIGATOR) || MB(ALLIGATOR_V3)
       static float motor_current[3 + DRIVER_EXTRUDERS];
-    #endif
-
-    #if ENABLED(FILAMENT_SENSOR)
-      static bool     filament_sensor;          // Flag that filament sensor readings should control extrusion
-      static float    filament_width_nominal,   // Theoretical filament diameter i.e., 3.00 or 1.75
-                      filament_width_meas;      // Measured filament diameter
-      static uint8_t  meas_delay_cm,            // Delay distance
-                      measurement_delay[];      // Ring buffer to delay measurement
-      static int8_t   filwidth_delay_index[2];  // Ring buffer indexes. Used by planner, temperature, and main code
     #endif
 
     #if ENABLED(RFID_MODULE)
@@ -194,24 +173,6 @@ class Printer {
       static void stopSDPrint(const bool store_location);
     #endif
 
-    #if ENABLED(FWRETRACT)
-      static void retract(const bool retracting, const bool swapping=false);
-    #endif
-
-    #if ENABLED(ADVANCED_PAUSE_FEATURE)
-      #if HAS_BUZZER
-        static void filament_change_beep(const int8_t max_beep_count, const bool init=false);
-      #endif
-      static void ensure_safe_temperature();
-      static bool pause_print(const float &retract, const float &retract2, const float &z_lift, const float &x_pos, const float &y_pos,
-                              const float &unload_length=0, const int16_t new_temp=0, const int8_t max_beep_count=0, const bool show_lcd=false);
-      static void wait_for_filament_reload(const int8_t max_beep_count=0);
-      static void resume_print(const float &load_length=0, const float &initial_extrude_length=0, const int8_t max_beep_count=0);
-      #if ENABLED(PARK_HEAD_ON_PAUSE)
-        static void park_head_on_pause();
-      #endif
-    #endif
-
     #if HAS_COLOR_LEDS
       static void set_led_color(const uint8_t r, const uint8_t g, const uint8_t b
                                 #if ENABLED(RGBW_LED) || ENABLED(NEOPIXEL_RGBW_LED)
@@ -265,12 +226,5 @@ class Printer {
 };
 
 extern Printer printer;
-
-// Define runplan for move axes
-#if IS_KINEMATIC
-  #define RUNPLAN(RATE_MM_S) planner.buffer_line_kinematic(mechanics.destination, RATE_MM_S, tools.active_extruder)
-#else
-  #define RUNPLAN(RATE_MM_S) mechanics.line_to_destination(RATE_MM_S)
-#endif
 
 #endif /* _PRINTER_H_ */
